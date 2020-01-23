@@ -51,15 +51,39 @@ class TwitterBot:
     def get_mentions(self):
 
         with open(Path('./last_id.txt'), 'w') as file:
-            mentions = self.api.mentions_timeline(last_id=int(file.read())) # this can cause trouble if file.read() is empty    
+            self.mentions = self.api.mentions_timeline(last_id=int(file.read())) # this can cause trouble if file.read() is empty
             file.write(mentions[0].id_str)
-            mentions_ids = [mentions[m].id for m in range(len(mentions))]
-
-        return mentions_ids
 
     def set_reminder(self):
-        """If there is a mention, create a reminder."""
-        pass
+        for m in len(self.mentions):
+            date = interpret_mentions(self.mentions[m].text, self.mentions[m].created_at)
+            
+
+
+
+
+    def interpret_mentions(self, text, date):
+
+        expressions = {'minutes': r'(\d+)\s+mi\w+', 
+                       'days': r'(\d+)\s+di\w+', 
+                       'months': r'(\d+)\s+me\w+',
+                       'years': r'(\d+)\s+an\w+',
+                       'date': r'(\d+)/(\d+)/(\d+)'}
+
+        delta = {}
+
+        for k in expressions.keys():
+            delta[k] = re.compile(expressions[k]).findall('10 meses')
+
+        if delta['date']:
+            delta = delta['date']
+            date = datetime.datetime(*map(lambda x: int(x), delta[0][::-1]))
+        else:
+            date += relativedelta.relativedelta(years=int(*delta['years']),
+                                                months=int(*delta['months']),
+                                                days=int(*delta['days']),
+                                                minutes=int(*delta['minutes']))
+        return date
 
     def reminder(self):
         pass
@@ -80,7 +104,7 @@ class TwitterBot:
 
     def action(self):
         """Set of actions taken by the robot"""
-        self.mentions = self.check_mentions()
+        self.get_mentions()
         self.set_reminder()
         self.reminders = self.check_reminders()
         self.reminder()
