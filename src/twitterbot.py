@@ -2,7 +2,7 @@
 import json
 import tweepy
 import time
-import datetime as dt
+import datetime
 from pathlib import Path
 from configparser import ConfigParser
 
@@ -55,12 +55,18 @@ class TwitterBot:
             file.write(mentions[0].id_str)
 
     def set_reminder(self):
+        self.reminders = {}
         for m in len(self.mentions):
             date = interpret_mentions(self.mentions[m].text, self.mentions[m].created_at)
-            
+            reminders[self.mentions[m].id_str] = date
+            reply(self.mentions[m], date)
 
 
+    def reply(self, mention, date):
 
+        text = 'Claro! Lembrarei você desse tweet no dia ' + dt.datetime.strftime(date, "%d/%m/%Y às %H:%M") '.'
+        self.api.update_status(text, in_reply_to_status_id=mention.id)
+        
 
     def interpret_mentions(self, text, date):
 
