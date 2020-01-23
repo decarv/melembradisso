@@ -14,7 +14,7 @@ class TwitterBot:
         # load bot configuration
         self.config = self.load_configuration()
         self.auth_config = config['auth']
-
+        self.bot_config = config['TwitterBot']
         
         # authentication
 
@@ -25,15 +25,14 @@ class TwitterBot:
 
     def load_configuration(self):
         config = ConfigParser()
-        config_p = Path('../config.ini')
         try:
-            config.read(config_p)
+            config.read(Path('../config.ini'))
             return config
         except FileNotFoundError:
             logging.warning('File config.ini not found.')
             configuration.create_config_file()
         except KeyError:
-            logging.warning(f'File config.ini does not contain configuration for {__class__.__name__}.')
+            logging.warning(f'File config.ini does not contain configuration file.')
             configuration.append_config_file()
 
     def auth(self):
@@ -49,9 +48,14 @@ class TwitterBot:
     def check_reminder(self):
         pass
 
-    def check_mention(self):
+    def get_mentions(self):
 
-        pass
+        with open(Path('./last_id.txt'), 'w') as file:
+            mentions = self.api.mentions_timeline(last_id=int(file.read())) # this can cause trouble if file.read() is empty    
+            file.write(mentions[0].id_str)
+            mentions_ids = [mentions[m].id for m in range(len(mentions))]
+
+        return mentions_ids
 
     def set_reminder(self):
         """If there is a mention, create a reminder."""
