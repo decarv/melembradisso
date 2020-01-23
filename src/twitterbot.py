@@ -1,37 +1,43 @@
-import os
+# import os
 import json
 import tweepy
 import time
 import datetime as dt
+from pathlib import Path
 from configparser import ConfigParser
+
 
 class TwitterBot:
 
     def __init__(self):
 
-        config = self.load_configuration()
-        self.bot_sleep = config['bot_sleep']
-        self.auth(config['consumer_key'], config['consumer_secret'], 
-                  config['access_token'], config['access_secret'])
+        # load bot configuration
+        self.config = self.load_configuration()
+        
+        # authentication
+        self.auth_config = config['auth']
+        self.auth()
 
 
         self.action()
 
-    def auth(self, consumer_key, consumer_secret, access_token, access_secret):
-        self.auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-        self.auth.set_access_token(access_token, access_secret)
-
     def load_configuration(self):
         config = ConfigParser()
+        config_p = Path('../config.ini')
         try:
-            config.read('config.ini')
-            return config[__class__.__name__]
+            config.read(config_p)
+            return config
         except FileNotFoundError:
             logging.warning('File config.ini not found.')
             configuration.create_config_file()
         except KeyError:
             logging.warning(f'File config.ini does not contain configuration for {__class__.__name__}.')
             configuration.append_config_file()
+
+    def auth(self):
+        
+        self.auth = tweepy.OAuthHandler(self.auth_config['key'], self.auth_config['secret_key'])
+        self.auth.set_access_token(self.auth_config['token'], self.auth_config['secret_token'])
 
     def load_data(self):
         """In case it is shut down, loads all the data for the reminders."""
