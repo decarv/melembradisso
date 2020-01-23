@@ -13,10 +13,12 @@ class TwitterBot:
 
         # load bot configuration
         self.config = self.load_configuration()
+        self.auth_config = config['auth']
+
         
         # authentication
-        self.auth_config = config['auth']
-        self.auth()
+
+        self.api = tweepy.API(self.auth())
 
 
         self.action()
@@ -36,8 +38,9 @@ class TwitterBot:
 
     def auth(self):
         
-        self.auth = tweepy.OAuthHandler(self.auth_config['key'], self.auth_config['secret_key'])
-        self.auth.set_access_token(self.auth_config['token'], self.auth_config['secret_token'])
+        auth = tweepy.OAuthHandler(self.auth_config['key'], self.auth_config['secret_key'])
+        auth = self.auth.set_access_token(self.auth_config['token'], self.auth_config['secret_token'])
+        return auth
 
     def load_data(self):
         """In case it is shut down, loads all the data for the reminders."""
@@ -47,7 +50,7 @@ class TwitterBot:
         pass
 
     def check_mention(self):
-        """For every minute, check for mentions."""
+
         pass
 
     def set_reminder(self):
