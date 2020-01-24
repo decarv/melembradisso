@@ -1,8 +1,11 @@
-# import os
+import os
+import re
+import logging
 import json
 import tweepy
 import time
 import datetime
+from dateutil import relativedelta
 from pathlib import Path
 from configparser import ConfigParser
 
@@ -13,19 +16,24 @@ class TwitterBot:
 
         # load bot configuration
         self.config = self.load_configuration()
-        self.auth_config = config['auth']
-        self.bot_config = config['TwitterBot']
+        self.auth_config = self.config['auth']
         
+        # load reminders
+        with open(Path('reminders.json')) as fp:
+            self.reminders = json.load(fp)
+
         # authentication
+        self.auth = tweepy.OAuthHandler(self.auth_config['key'], self.auth_config['secret_key'])
+        self.auth.set_access_token(self.auth_config['token'], self.auth_config['secret_token'])
+        self.api = tweepy.API(self.auth)
 
-        self.api = tweepy.API(self.auth())
+        logging.warning('API loaded.')
 
+        self.last_id = None # VAI QUEBRAR
 
-        self.reminders = json.load(Path('reminders.json'))
-
-
+        # bot actions
         while True:
-            self.action()
+            self.actions()
             time.sleep(60)
 
     def load_configuration(self):
@@ -40,34 +48,33 @@ class TwitterBot:
             logging.warning(f'File config.ini does not contain configuration file.')
             configuration.append_config_file()
 
-    def auth(self):
-        auth = tweepy.OAuthHandler(self.auth_config['key'], self.auth_config['secret_key'])
-        auth = self.auth.set_access_token(self.auth_config['token'], self.auth_config['secret_token'])
-        return auth
-
     def get_mentions(self):
-        with open(Path('./last_id.txt'), 'w') as file:
-            self.mentions = self.api.mentions_timeline(last_id=int(file.read())) # FIX THIS: this can cause trouble if file.read() is empty.
-            file.write(mentions[0].id_str)
+        logging.info('Getting mentions.')
+        self.mentions = self.api.mentions_timeline(since_id=self.last_id)
 
     def set_reminder(self):
-        for m in len(self.mentions):
-            if not self.mentions[m].retweeted: # MAYBE FIXED: Returns the 20 most recent mentions, including retweets.
-                date = self.interpret_mentions(self.mentions[m].text, self.mentions[m].created_at)
-                self.reply(self.mentions[m], date)
-                self.reminders[self.mentions[m]] = date
+        for m in range(len(self.mentions)):
+            if not self.mentions[m].retweeted:
+                
+                try:
+                    logging.info(f'Replying to mention from @{self.mentions[m].user.screen_name}.')
+                    date = self.interpret_mentions(self.mentions[m].text, self.mentions[m].created_at)
+                    text = f'Claro @{self.mentions[m].user.screen_name}! Lembrarei a você desse tweet no dia ' + self.date_to_str(date) + '.'
+                    self.api.update_status(text, in_reply_to_status_id=self.mentions[m].id)
+                    self.reminders[self.mentions[m].id] = [self.mentions[m].user.screen_name, date]
+                except:
+                    self.last_id = self.mentions[m].id
+                    logging.warning(f'Set Reminder exception raised.')
+                    logging.warning(f'This is the last_id: {self.last_id}, from {self.mentions[m].user.screen_name}.')
+                    break
 
-    def reply(self, mention, date):
-        # CANCEL_REMINDER FUNCTION
-        # if not date:
-        #     text = 'Tudo certo! Seu lembrete foi cancelado!'
-        # else:
-        text = 'Claro! Lembrarei a você desse tweet no dia ' + dt.datetime.strftime(date, "%d/%m/%Y às %H:%M") + '.'
-        self.api.update_status(text, in_reply_to_status_id=mention.id)
+    def date_to_str(self, date):
+        return datetime.datetime.strftime(date, "%d/%m/%Y às %H:%M")
 
     def interpret_mentions(self, text, date):
 
         expressions = {'minutes': r'(\d+)\s+mi\w+', 
+                       'hours': r'(\d+)\s+ho\w+',
                        'days': r'(\d+)\s+di\w+', 
                        'months': r'(\d+)\s+me\w+',
                        'years': r'(\d+)\s+an\w+',
@@ -75,10 +82,9 @@ class TwitterBot:
                        'cancel': r'(cancelar)'}
 
         delta = {}
-
         for k in expressions.keys():
             delta[k] = re.compile(expressions[k]).findall(text)
-
+        
         if delta['cancel']:
             return None
         elif delta['date']:
@@ -89,17 +95,19 @@ class TwitterBot:
             date += relativedelta.relativedelta(years=int(*delta['years']),
                                                 months=int(*delta['months']),
                                                 days=int(*delta['days']),
+                                                hours=int(*delta['days'])-3, # quick fix for GMT -3 
                                                 minutes=int(*delta['minutes']))
             return date
 
-    def check_reminder(self):
-        for k, v in self.reminders.items():
-            if datetime.datetime.now() >= self.reminders[k]:
-                self.reminder(k)
-
-    def reminder(self, k):
-        text = 'Oi! Aqui está o seu lembrete!'
-        self.api.update_status(text, in_reply_to_status_id=k)
+    def reminder(self):
+        for status_id, v in self.reminders.items():
+            if datetime.datetime.now() >= v[1]:
+                    try:
+                        text = f'Oi, @{v[0]}! Aqui está o seu lembrete!'
+                        self.api.update_status(text, in_reply_to_status_id=status_id)
+                    except:
+                        logging.warning(f'Reminder exception raised.')
+                        break
 
     def get_cancel_requests(self):
         pass
@@ -107,9 +115,11 @@ class TwitterBot:
     def upload_reminders(self):
         pass        
 
-    def action(self):
+    def actions(self):
         """Sequence of actions taken by the robot"""
         self.get_mentions()
         self.set_reminder()
-        self.check_reminders()
         self.reminder()
+
+if __name__ == '__main__':
+    TwitterBot()
