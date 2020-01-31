@@ -79,7 +79,7 @@ class TwitterBot:
         logging.info('RUNNING REMIND FUNCTION.')
         for k, v in self.reminders.items():
             if type(self.reminders[k].get('reminder')) is datetime.datetime: # CANNOT FIX THIS?
-                if datetime.datetime.now() >= self.reminders[k].get('reminder') and not self.reminders[k]['done']:
+                if datetime.datetime.now() >= self.reminders[k].get('reminder') and self.reminders[k]['done'] == False:
                     logging.info(f'Reminder created for {k}.')
                     text = f'Oi @{self.reminders[k]["name"]}! Aqui está o seu lembrete!'
                     self.reply(text, status_id=k)
