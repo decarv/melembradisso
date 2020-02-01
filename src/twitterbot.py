@@ -8,18 +8,17 @@ import datetime
 import pickle
 from dateutil import relativedelta
 from pathlib import Path
-from configparser import ConfigParser
 
 
 class TwitterBot:
 
-    logging.basicConfig(level=logging.INFO, format='TwitterBot - %(asctime)s - %(message)s')
+    logging.basicConfig(
+        level=logging.INFO, 
+        format='TwitterBot - %(asctime)s - %(message)s'
+        )
 
     def __init__(self):
         logging.info('Loading configuration and variables.')
-
-        # load bot configuration
-        config = self.load_configuration()
 
         # load variables
         try:
@@ -33,30 +32,21 @@ class TwitterBot:
         except:
             self.lid = None
 
+        self.key = os.getenv('KEY')
+        self.secret_key = os.getenv('SECRET_KEY')
+        self.token = os.getenv('TOKEN')
+        self.secret_token = os.getenv('SECRET_TOKEN')
+
         logging.info('Configuration and variables loaded.')
-        
-        # access API
-        # MODIFY TO HANDLE POSSIBLE API ERRORS
-        self.auth = tweepy.OAuthHandler(config['auth']['key'], 
-                           config['auth']['secret_key'])
-        self.auth.set_access_token(config['auth']['token'], 
-                              config['auth']['secret_token'])
+            
+        # authenticating
+        logging.info('Configuration and variables loaded.')
+        self.auth = tweepy.OAuthHandler(self.key, self.secret_key) # MODIFY TO HANDLE POSSIBLE auth ERRORS
+        self.auth.set_access_token(self.token, self.secret_token)
         self.api = tweepy.API(self.auth)
 
         # activate bot
         self.activate()
-
-    def load_configuration(self):
-        config = ConfigParser()
-        try:
-            config.read(Path('../config.ini'))
-            return config
-        except FileNotFoundError:
-            logging.warning('File config.ini not found.')
-            configuration.create_config_file()
-        except KeyError:
-            logging.warning(f'File config.ini does not contain configuration file.')
-            configuration.append_config_file()
 
     def get_mtl(self):
         logging.info('Retrieving mentions_timeline.')
@@ -78,7 +68,7 @@ class TwitterBot:
         """Iterate date from text of a tweet status."""
         logging.info('RUNNING REMIND FUNCTION.')
         for k, v in self.reminders.items():
-            if type(self.reminders[k].get('reminder')) is datetime.datetime: # CANNOT FIX THIS?
+            if type(self.reminders[k].get('reminder')) is datetime.datetime:
                 if datetime.datetime.now() >= self.reminders[k].get('reminder') and self.reminders[k]['done'] == False:
                     logging.info(f'Reminder created for {k}.')
                     text = f'Oi @{self.reminders[k]["name"]}! Aqui está o seu lembrete!'
