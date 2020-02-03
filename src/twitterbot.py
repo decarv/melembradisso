@@ -6,6 +6,7 @@ import tweepy
 import time
 import datetime
 import pickle
+import psycopg2
 from dateutil import relativedelta
 from pathlib import Path
 
@@ -18,69 +19,68 @@ class TwitterBot:
         )
 
     def __init__(self):
-        logging.info('Loading configuration and variables.')
 
-        # load variables
-        try:
-            with open(Path('reminders.pyc'), 'rb') as fp:
-                self.reminders = pickle.load(fp)
-        except:
-            self.reminders = {}
-        try:
-            with open(Path('lid.pyc'), 'rb') as fp:
-                self.lid = pickle.load(fp)
-        except:
-            self.lid = None
-
-        self.key = os.getenv('KEY')
-        self.secret_key = os.getenv('SECRET_KEY')
-        self.token = os.getenv('TOKEN')
-        self.secret_token = os.getenv('SECRET_TOKEN')
-
-        logging.info('Configuration and variables loaded.')
-            
-        # authenticating
-        logging.info('Configuration and variables loaded.')
-        self.auth = tweepy.OAuthHandler(self.key, self.secret_key) # MODIFY TO HANDLE POSSIBLE auth ERRORS
-        self.auth.set_access_token(self.token, self.secret_token)
+        # authenticate
+        logging.info('Authenticating...')
+        self.auth = tweepy.OAuthHandler(
+            os.getenv('KEY'), 
+            os.getenv('SECRET_KEY'))
+        self.auth.set_access_token(
+            os.getenv('TOKEN'), 
+            os.getenv('SECRET_TOKEN'))
         self.api = tweepy.API(self.auth)
+        logging.info('Authentication complete!')
 
-        # activate bot
+        # connect to the database
+        # set to False when running in worker
+        local = True
+        if local:
+            self.local_connect_to_db()
+        else:
+            logging.info('Connecting to DB...')
+            self.conn = psycopg2.connect(os.environ['DATABASE_URL'], sslmode='require')
+            self.cursor = conn.cursor()
+            logging.info('Connected to the database.')    
+
+        # get instance variables
+        search_query = """SELECT * 
+                      FROM reminders
+                      WHERE id = %s"""
+        self.cursor.execute(search_query)
+        query = self.cursor.fetchtchall() 
+        self.lid = query[0][0]
+        
+        self.mtl = None # mentions timeline
+
+        # activate
         self.activate()
 
+    def activate(self):
+        logging.info('Activating TwitterBot.')
+        while True:
+            self.get_mtl()
+            self.insert_to_reminders()
+            self.remind()
+            time.sleep(60)
+
     def get_mtl(self):
-        logging.info('Retrieving mentions_timeline.')
+        logging.info('Retrieving mentions from timeline.')
         self.mtl = self.api.mentions_timeline(since_id=self.lid)
 
-    def set_reminders(self):
-        logging.info('Running set_reminders.')
-        for s in range(len(self.mtl)):
-            if not self.mtl[s].retweeted:
-                self.reminders[self.mtl[s].id_str] = {
-                        'name': self.mtl[s].user.screen_name,
-                        'reminder': self.get_reminder(self.mtl[s]),
-                        'done': False
-                }
-                self.lid = self.mtl[s].id
-        self.save_reminders()
-
-    def remind(self):
-        """Iterate date from text of a tweet status."""
-        logging.info('RUNNING REMIND FUNCTION.')
-        for k, v in self.reminders.items():
-            if type(self.reminders[k].get('reminder')) is datetime.datetime:
-                if datetime.datetime.now() >= self.reminders[k].get('reminder') and self.reminders[k]['done'] == False:
-                    logging.info(f'Reminder created for {k}.')
-                    text = f'Oi @{self.reminders[k]["name"]}! Aqui está o seu lembrete!'
-                    self.reply(text, status_id=k)
-                    self.reminders[k]['done'] = True
-
-    def reply(self, text, status_id):
-        logging.info(f'Replying to Status ID {status_id}')
-        try:
-            self.api.update_status(text, in_reply_to_status_id=status_id)
-        except tweepy.TweepError as e:
-            print(e.reason)
+    def insert_to_reminders(self):
+        insert_query = """INSERT INTO reminders (id, name, reminder, created_at, done)
+                      VALUES (%s, %s, %s, %s, %s)"""
+    
+        for status in range(len(self.mtl)):
+            insert = (
+                self.mtl[status].id, 
+                self.mtl[status].user.screen_name, 
+                self.mtl[status].created_at, 
+                self.get_reminder(status=self.mtl[status]), 
+                False)
+            self.cursor.execute(insert_query, insert)
+            self.conn.commit()
+            self.lid = self.mtl[status].id
 
     def get_reminder(self, status):
         """Returns date from text of a tweet status."""
@@ -141,31 +141,51 @@ class TwitterBot:
             logging.warning(f'ReminderError for id {status.id}.')
             self.reply(text, status_id=status.id)
 
+    def remind(self):
+
+        now = datetime.datetime.now()
+
+        select_query = """SELECT *
+                          FROM reminders
+                          WHERE reminder >= %s AND done = False"""
+
+        self.cursor.execute(select_query, (now, ))
+        reminders = self.cursor.fetchall() # returns a list of reminders
+        self.conn.commit()
+
+        for r in reminders:
+            text = f'Oi @{r[1]}! Aqui está o seu lembrete!'
+            self.reply(text, status_id=r[0])
+            
+            # clear reminder: set done to True
+            update_query = f"""UPDATE reminders
+                                  SET done = True
+                                WHERE id = {r[0]}"""
+            self.cursor.execute(update_query)
+            self.conn.commit()
+
+    def reply(self, text, status_id):
+        logging.info(f'Replying to Status ID {status_id}')
+        try:
+            self.api.update_status(text, in_reply_to_status_id=status_id)
+        except tweepy.TweepError as e:
+            print(e.reason)
+
     def to_str(self, date):
         return datetime.datetime.strftime(date, "%d/%m/%Y às %H:%M")
 
-    def save_reminders(self):
-        logging.info('Saving Reminders and Old Reminders.')
-        
-        with open(Path('reminders.pyc'), 'wb') as fp:
-            pickle.dump(self.reminders, fp)
-        with open(Path('lid.pyc'), 'wb') as fp:
-            pickle.dump(self.lid, fp)
+    def local_connect_to_db(self):
+        try:    
+            connection = psycopg2.connect(
+                host='ec2-100-26-88-55.compute-1.amazonaws.com',
+                database='dal798qe8l7uhp',
+                user='xfyvyhnxqkjhpq', 
+                port='5432',
+                password=)
 
-    def activate(self):
-        iteration = 0
-        wait = 10 # wait for 10 iterations before saving
-        
-        while True:
-            self.get_mtl()
-            self.set_reminders()
-            self.remind()
-            time.sleep(60)
+            self.cursor = connection.cursor()
 
-            iteration += 1
-            if iteration == wait:
-                iteration = 0
-
+        except (Exception, psycopg2.Error) as error :
+            print ("Error while connecting to PostgreSQL", error)
 
 if __name__ == '__main__':
-    TwitterBot()
