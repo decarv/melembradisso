@@ -35,19 +35,27 @@ class TwitterBot:
         # set to False when running in worker
         local = True
         if local:
-            self.local_connect_to_db()
+            self.conn = psycopg2.connect(
+                host=os.getenv('HOST'),
+                database=os.getenv('DATABASE'),
+                user=os.getenv('USER'), 
+                port=os.getenv('PORT'),
+                password=os.getenv('PASSWORD'))
+
+            self.cursor = self.conn.cursor()
         else:
             logging.info('Connecting to DB...')
-            self.conn = psycopg2.connect(os.environ['DATABASE_URL'], sslmode='require')
+            self.conn = psycopg2.connect(
+                os.environ['DATABASE_URL'], 
+                sslmode='require')
             self.cursor = conn.cursor()
             logging.info('Connected to the database.')    
 
         # get instance variables
-        search_query = """SELECT * 
-                      FROM reminders
-                      WHERE id = %s"""
+        search_query = """SELECT max(id) 
+                      FROM reminders"""
         self.cursor.execute(search_query)
-        query = self.cursor.fetchtchall() 
+        query = self.cursor.fetchall() 
         self.lid = query[0][0]
         
         self.mtl = None # mentions timeline
@@ -174,18 +182,5 @@ class TwitterBot:
     def to_str(self, date):
         return datetime.datetime.strftime(date, "%d/%m/%Y às %H:%M")
 
-    def local_connect_to_db(self):
-        try:    
-            connection = psycopg2.connect(
-                host='ec2-100-26-88-55.compute-1.amazonaws.com',
-                database='dal798qe8l7uhp',
-                user='xfyvyhnxqkjhpq', 
-                port='5432',
-                password=)
-
-            self.cursor = connection.cursor()
-
-        except (Exception, psycopg2.Error) as error :
-            print ("Error while connecting to PostgreSQL", error)
-
 if __name__ == '__main__':
+    TwitterBot()
