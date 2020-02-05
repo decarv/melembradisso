@@ -5,7 +5,6 @@ import json
 import tweepy
 import time
 import datetime
-import pickle
 import psycopg2
 from dateutil import relativedelta
 from pathlib import Path
@@ -32,38 +31,22 @@ class TwitterBot:
         logging.info('Authentication complete!')
 
         # connect to the database
-        # set to False when running in worker
-        local = True
-        if local:
-            self.conn = psycopg2.connect(
-                host=os.getenv('HOST'),
-                database=os.getenv('DATABASE'),
-                user=os.getenv('USER'), 
-                port=os.getenv('PORT'),
-                password=os.getenv('PASSWORD'))
+        # set to False when running at heroku
+        self.connect_to_db(local=False)
 
-            self.cursor = self.conn.cursor()
-        else:
-            logging.info('Connecting to DB...')
-            self.conn = psycopg2.connect(
-                os.environ['DATABASE_URL'], 
-                sslmode='require')
-            self.cursor = conn.cursor()
-            logging.info('Connected to the database.')    
+        # get instance variable
 
-        # get instance variables
-        search_query = """SELECT max(id) 
-                      FROM reminders"""
-        self.cursor.execute(search_query)
-        query = self.cursor.fetchall() 
-        self.lid = query[0][0]
-        
+        logging.info('Getting the latest id.')
+        self.cursor.execute(
+            """SELECT max(id) 
+                 FROM reminders"""
+                 )
+        query = self.cursor.fetchone()
+        self.lid = query[0]
+        logging.info(f"The latest id is {self.lid}")
         self.mtl = None # mentions timeline
 
-        # activate
-        self.activate()
-
-    def activate(self):
+        # actions
         logging.info('Activating TwitterBot.')
         while True:
             self.get_mtl()
@@ -151,26 +134,37 @@ class TwitterBot:
 
     def remind(self):
 
+        logging.info('Checking reminders.')
+
         now = datetime.datetime.now()
 
         select_query = """SELECT *
                           FROM reminders
                           WHERE reminder >= %s AND done = False"""
-
-        self.cursor.execute(select_query, (now, ))
-        reminders = self.cursor.fetchall() # returns a list of reminders
-        self.conn.commit()
+        try:
+            self.cursor.execute(select_query, (now, ))
+            reminders = self.cursor.fetchall() # returns a list of reminders
+            self.conn.commit()
+        except psycopg2.OperationalError:
+            self.connect_to_db(self.remind())
 
         for r in reminders:
             text = f'Oi @{r[1]}! Aqui está o seu lembrete!'
             self.reply(text, status_id=r[0])
-            
-            # clear reminder: set done to True
-            update_query = f"""UPDATE reminders
+            self.update_reminder(id=r[0])
+
+    def update_reminder(self, r_id):
+        """clear reminder: set done to True"""
+        update_query = f"""UPDATE reminders
                                   SET done = True
-                                WHERE id = {r[0]}"""
+                                WHERE id = {r_id}"""
+
+        try:
             self.cursor.execute(update_query)
             self.conn.commit()
+        except psycopg2.OperationalError:
+            self.connect_to_db(self.update_reminder(r_id))
+
 
     def reply(self, text, status_id):
         logging.info(f'Replying to Status ID {status_id}')
@@ -181,6 +175,30 @@ class TwitterBot:
 
     def to_str(self, date):
         return datetime.datetime.strftime(date, "%d/%m/%Y às %H:%M")
+
+    def connect_to_db(self, local, function=None):
+
+        if local:
+            logging.info('Connecting to DB...')
+            self.conn = psycopg2.connect(
+                host=os.getenv('HOST'),
+                database=os.getenv('DATABASE'),
+                user=os.getenv('USER'), 
+                port=os.getenv('PORT'),
+                password=os.getenv('PASSWORD'))
+
+            self.cursor = self.conn.cursor()
+            logging.info('Connected to the database.') 
+        else:
+            logging.info('Connecting to DB...')
+            self.conn = psycopg2.connect(
+                os.environ['DATABASE_URL'], 
+                sslmode='require')
+            self.cursor = conn.cursor()
+            logging.info('Connected to the database.') 
+
+        if function is not None:
+            function()
 
 if __name__ == '__main__':
     TwitterBot()
