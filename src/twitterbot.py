@@ -194,7 +194,7 @@ class TwitterBot:
             self.conn = psycopg2.connect(
                 os.environ['DATABASE_URL'], 
                 sslmode='require')
-            self.cursor = conn.cursor()
+            self.cursor = self.conn.cursor()
             logging.info('Connected to the database.') 
 
         if function is not None:
