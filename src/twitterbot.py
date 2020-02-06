@@ -62,7 +62,7 @@ class TwitterBot:
         logging.info(f'Got {len(self.mtl)} new mentions.')
 
     def insert_to_reminders(self):
-        insert_query = """INSERT INTO reminders (id, name, reminder, created_at, done)
+        insert_query = """INSERT INTO reminders (id, name, created_at, reminder, done)
                       VALUES (%s, %s, %s, %s, %s)"""
     
         for status in range(len(self.mtl)):
