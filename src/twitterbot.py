@@ -144,7 +144,7 @@ class TwitterBot:
 
         now = datetime.datetime.now()
 
-        select_query = """SELECT reminder
+        select_query = """SELECT id, name, reminder
                           FROM reminders
                           WHERE reminder <= %s AND done = false"""
         self.conn.commit()
