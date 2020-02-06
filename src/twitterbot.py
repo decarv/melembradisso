@@ -47,13 +47,14 @@ class TwitterBot:
         logging.info(f"The latest id is {self.lid}")
         self.mtl = None # mentions timeline
 
-        # # actions
-        # logging.info('Activating TwitterBot.')
-        # while True:
-        #     self.get_mtl()
-        #     self.insert_to_reminders()
-        #     self.remind()
-        #     time.sleep(60)
+        # actions
+        logging.info('Activating TwitterBot.')
+        while True:
+            self.get_mtl()
+            self.insert_to_reminders()
+            self.remind()
+            logging.info(f'Sleeping for 60 seconds.')
+            time.sleep(60)
 
     def get_mtl(self):
         logging.info('Retrieving mentions from timeline.')
@@ -146,12 +147,13 @@ class TwitterBot:
         select_query = """SELECT reminder
                           FROM reminders
                           WHERE reminder <= %s AND done = false"""
+        self.conn.commit()
         try:
             logging.info('Executing select_query.')
             self.cursor.execute(select_query, (now, ))
             reminders = self.cursor.fetchall() # returns a list of reminders
-            logging.info(f'Got this list of reminders: {reminders}')
             self.conn.commit()
+            logging.info(f'Got this list of reminders: {reminders}. Total of {len(reminders)}.')
         except psycopg2.OperationalError:
             self.connect_to_db(function=self.remind())
 
@@ -187,25 +189,12 @@ class TwitterBot:
         return datetime.datetime.strftime(date, "%d/%m/%Y às %H:%M")
 
     def connect_to_db(self, function=None):
-        local = True
-        if local:
-            logging.info('Connecting to DB...')
-            self.conn = psycopg2.connect(
-                host=os.getenv('HOST'),
-                database=os.getenv('DATABASE'),
-                user=os.getenv('USER'), 
-                port=os.getenv('PORT'),
-                password=os.getenv('PASSWORD'))
-
-            self.cursor = self.conn.cursor()
-            logging.info('Connected to the database.') 
-        else:
-            logging.info('Connecting to DB...')
-            self.conn = psycopg2.connect(
-                os.environ['DATABASE_URL'], 
-                sslmode='require')
-            self.cursor = self.conn.cursor()
-            logging.info('Connected to the database.') 
+        logging.info('Connecting to DB...')
+        self.conn = psycopg2.connect(
+            os.environ['DATABASE_URL'], 
+            sslmode='require')
+        self.cursor = self.conn.cursor()
+        logging.info('Connected to the database.') 
 
         if function is not None:
             function()
