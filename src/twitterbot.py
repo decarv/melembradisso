@@ -118,7 +118,7 @@ class TwitterBot:
                 years=int(*dts['years']), 
                 months=int(*dts['months']), 
                 days=int(*dts['days']),
-                hours=int(*dts['hours'])-3, # quick fix for GMT -3 
+                hours=int(*dts['hours']),
                 minutes=int(*dts['minutes'])
             )
             reminder = status.created_at + delta
@@ -140,7 +140,7 @@ class TwitterBot:
 
         select_query = """SELECT reminder
                           FROM reminders
-                          WHERE reminder <= %s AND done = false"""
+                          WHERE reminder <= NOW() AND done = false"""
         try:
             logging.info('Executing select_query.')
             self.cursor.execute(select_query, (now, ))
@@ -178,10 +178,11 @@ class TwitterBot:
             print(e.reason)
 
     def to_str(self, date):
+        date -= relativedelta.relativedelta(hours=3) # comment to GMT-3
         return datetime.datetime.strftime(date, "%d/%m/%Y às %H:%M")
 
     def connect_to_db(self, function=None):
-        local = False
+        local = True
         if local:
             logging.info('Connecting to DB...')
             self.conn = psycopg2.connect(
