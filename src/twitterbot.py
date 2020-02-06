@@ -180,7 +180,7 @@ class TwitterBot:
     def to_str(self, date):
         return datetime.datetime.strftime(date, "%d/%m/%Y às %H:%M")
 
-    def connect_to_db(self, local, function=None):
+    def connect_to_db(self, function=None):
         local = False
         if local:
             logging.info('Connecting to DB...')
