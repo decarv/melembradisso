@@ -42,21 +42,23 @@ class TwitterBot:
                  FROM reminders"""
                  )
         query = self.cursor.fetchone()
-        self.lid = query[0]
+        *self.lid = query
+        self.conn.commit()
         logging.info(f"The latest id is {self.lid}")
         self.mtl = None # mentions timeline
 
-        # actions
-        logging.info('Activating TwitterBot.')
-        while True:
-            self.get_mtl()
-            self.insert_to_reminders()
-            self.remind()
-            time.sleep(60)
+        # # actions
+        # logging.info('Activating TwitterBot.')
+        # while True:
+        #     self.get_mtl()
+        #     self.insert_to_reminders()
+        #     self.remind()
+        #     time.sleep(60)
 
     def get_mtl(self):
         logging.info('Retrieving mentions from timeline.')
         self.mtl = self.api.mentions_timeline(since_id=self.lid)
+        logging.info(f'Got {len(self.mtl)} new mentions.')
 
     def insert_to_reminders(self):
         insert_query = """INSERT INTO reminders (id, name, reminder, created_at, done)
@@ -69,9 +71,12 @@ class TwitterBot:
                 self.mtl[status].created_at, 
                 self.get_reminder(status=self.mtl[status]), 
                 False)
-            self.cursor.execute(insert_query, insert)
-            self.conn.commit()
-            self.lid = self.mtl[status].id
+            try:
+                self.cursor.execute(insert_query, insert)
+                self.conn.commit()
+                self.lid = self.mtl[status].id
+            except:
+                pass
 
     def get_reminder(self, status):
         """Returns date from text of a tweet status."""
@@ -140,7 +145,7 @@ class TwitterBot:
 
         select_query = """SELECT reminder
                           FROM reminders
-                          WHERE reminder <= NOW() AND done = false"""
+                          WHERE reminder <= %s AND done = false"""
         try:
             logging.info('Executing select_query.')
             self.cursor.execute(select_query, (now, ))
