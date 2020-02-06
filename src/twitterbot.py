@@ -154,7 +154,7 @@ class TwitterBot:
             text = f'Oi @{r[1]}! Aqui está o seu lembrete!'
             self.reply(text, status_id=r[0])
             logging.info(f'Reminded tweet: {r[0]}')
-            self.update_reminder(id=r[0])
+            self.update_reminder(r_id=r[0])
             logging.info(f'Cleared reminder for: {r[0]} (done set to true).')
 
     def update_reminder(self, r_id):
