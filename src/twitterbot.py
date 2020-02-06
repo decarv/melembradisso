@@ -42,7 +42,7 @@ class TwitterBot:
                  FROM reminders"""
                  )
         query = self.cursor.fetchone()
-        *self.lid = query
+        self.lid = query[0]
         self.conn.commit()
         logging.info(f"The latest id is {self.lid}")
         self.mtl = None # mentions timeline
