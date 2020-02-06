@@ -32,7 +32,7 @@ class TwitterBot:
 
         # connect to the database
         # set to False when running at heroku
-        self.connect_to_db(local=False)
+        self.connect_to_db()
 
         # get instance variable
 
@@ -118,7 +118,7 @@ class TwitterBot:
                 years=int(*dts['years']), 
                 months=int(*dts['months']), 
                 days=int(*dts['days']),
-                hours=int(*dts['days'])-3, # quick fix for GMT -3 
+                hours=int(*dts['hours'])-3, # quick fix for GMT -3 
                 minutes=int(*dts['minutes'])
             )
             reminder = status.created_at + delta
@@ -140,18 +140,22 @@ class TwitterBot:
 
         select_query = """SELECT *
                           FROM reminders
-                          WHERE reminder >= %s AND done = False"""
+                          WHERE reminder <= %s AND done = false"""
         try:
+            logging.info('Executing select_query.')
             self.cursor.execute(select_query, (now, ))
             reminders = self.cursor.fetchall() # returns a list of reminders
+            logging.info(f'Got this list of reminders: {reminders}')
             self.conn.commit()
         except psycopg2.OperationalError:
-            self.connect_to_db(self.remind())
+            self.connect_to_db(function=self.remind())
 
         for r in reminders:
             text = f'Oi @{r[1]}! Aqui está o seu lembrete!'
             self.reply(text, status_id=r[0])
+            logging.info(f'Reminded tweet: {r[0]}')
             self.update_reminder(id=r[0])
+            logging.info(f'Cleared reminder for: {r[0]} (done set to true).')
 
     def update_reminder(self, r_id):
         """clear reminder: set done to True"""
@@ -163,7 +167,7 @@ class TwitterBot:
             self.cursor.execute(update_query)
             self.conn.commit()
         except psycopg2.OperationalError:
-            self.connect_to_db(self.update_reminder(r_id))
+            self.connect_to_db(function=self.update_reminder(r_id))
 
 
     def reply(self, text, status_id):
@@ -177,7 +181,7 @@ class TwitterBot:
         return datetime.datetime.strftime(date, "%d/%m/%Y às %H:%M")
 
     def connect_to_db(self, local, function=None):
-
+        local = False
         if local:
             logging.info('Connecting to DB...')
             self.conn = psycopg2.connect(
