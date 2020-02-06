@@ -138,7 +138,7 @@ class TwitterBot:
 
         now = datetime.datetime.now()
 
-        select_query = """SELECT *
+        select_query = """SELECT reminder
                           FROM reminders
                           WHERE reminder <= %s AND done = false"""
         try:
